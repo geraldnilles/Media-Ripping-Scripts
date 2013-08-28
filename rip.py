@@ -86,24 +86,94 @@ def transcode(filename):
 	transcode_audio(filename)
 
 
+#----------------
+# Post-Rip Clean-up functions
+#----------------
 
-def run():
-	for x in ["0211.mkv","0212.mkv","0213.mkv","0214.mkv"]:
-		transcode_video_x264("raw/"+x)
+## TV Cleanup
+#
+# Selects all of the videos that are a similar size.  This avoids the small 
+# filler tracks as well as any "Play All" tracks
+def tv_cleanup(mkvs):
+	# Get the sizes of each MKVs
+	mkv_sizes = []
+	for m in mkvs:
+		mkv_sizes.append(size(m))
+
+	mkv_std_devs = []
+	for m in mkv_sizes:
+		# Calculate the Standard Deviation with m as the mean
+		# Find the point that has the lowest standard deviation
+	
+	min_std_dev = min(mkv_std_devs)
+
+	# From the lowest standard deviation point, delete all devices outside
+	
+
+## Movie Cleanup
+#
+# Selects the largest MKV file and deletes the rest
+def movie_cleanup(mkvs):
+	# TODO Use a lambda function instead of a for loop
+	max_size = 0
+	max_file = ""
+	for m in mkvs:
+		size = os.path.size(m)
+		if size > max_size:
+			max_size = size
+
+	mkvs = [max_file]
+	
 
 
+def run(args):
+	# Create a bank list of MKVs to rip
+	mkvs = []
+	if not args.only_convert:
+		# Convert Disc to MKVs usign MakeMKV binary
+		mkvs = rip(args.name[0])
+		# Clean up MKVs
+		if args.tv:
+			# Only keep similarly sized video files
+			tv_cleanup(mkvs)
+		else:
+			# Only keep the largest video file
+			move_cleanup(mkvs)
+		
+
+	if len(mkvs) == 0:
+		mkvs = args.name
+	if not args.only_rip:
+		for mkv in args.name:
+			transcode(mkv,args.video,args.audio,args.only_english)
 
 def parse_args():
 	parser = argparse.ArgumentParser(description="Media Ripping Script")
-	# Rips all of the titles and only keeps the largest title
-	parser.add_argument("-m","--movie") # Movie Ripper
-	# Rips the TV episodes
-	parser.add_argument("-t","--tv") # TV Ripper
-	parser.add_argument("-v","--video") # Select Video Codec (x264, copy)
-	parser.add_argument("-a","--audio") # Select Audio Codec (opus, aac, copy)
-	parser.add_argument("-e","--only-english") # Only Rip English Audio
-
+	# Select Movie or TV mode
+	parser.add_argument("-m","--movie",action="store_true") 
+	parser.add_argument("-t","--tv",action="store_true")
+	# Add argument for selecting video codec. x264 is default
+	parser.add_argument(
+			"-v","--video",
+			choices=["copy","x264"],
+			default="x264")
+	# Add argument for selecting the audio codec.  Copying is default
+	parser.add_argument(
+			"-a","--audio",
+			choices=["copy","aac","opus"],
+			default="copy") 
+	# Add option for only saving english tracks
+	parser.add_argument("-e","--only-english",action="store_true")
+	# Add option for ripping only
+	parser.add_argument("-r","--only-rip",action="store_true")
+	# Add option for transcoding only
+	parser.add_argument("-c","--only-convert",action="store_true")
+	# Add option for naming the video
+	parser.add_argument("name")
+	# Conver the arguments into a namespace
 	args = parser.parse_args()
+	# Run the script
+	run(args)
 
 
 if __name__ == "__main__":
