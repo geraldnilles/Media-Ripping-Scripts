@@ -8,54 +8,58 @@ import argparse
 def cmd(cmd):
 	subprocess.call(cmd)
 
-# Rip All
-#
-# Rips an entire DVD from the disk to the raw/ folder
-def rip_all():
-	rip(["all"])
-
-
-# Rip Title
+## Rip Title
 # 
 # Rips the provided list of titls to the raw folder
-def rip(titles):
-	for t in titles:
-		cmd("makemkvcon mkv disc:1 "+t+" raw")
+#
+# @param disc_name - The name of the disk you are ripping
+# @return a list of MKV files created
+def rip(disc_name):
+	rip_folder = "rip/"+disc_name
+	os.mkdir(rip_folder)
+	cmd("makemkvcon mkv dev:dvd all "+rip_folder)
+	return rip_folder
 
 #-------------
 # Transfer Funtions
 #-------------
 
-## Upload a local file to a Samba Share
-def upload_to_SMB(filename,path):
+## Upload a local file to the HTTP server
+#
+# Upload a local file to the media server using HTTP.
+#
+# @param local_path - Local path to the file you want to upload
+# @param media_type - Type of Media.  Options right now are "tv" and "movie"
+# @return returns 0 is successful.
+def upload_media_server(local_path,media_type):
+	# HTTP Upload
 	pass
 
-## Download a local file from the Samba Share
-def download_from_SMB(path):
-	pass
 
 #---------------
 # Video Transcode Functions
 #---------------
 
 # Transcode Video
-def transcode_video(filename):
-	transcode_video_x264(filename)
+def transcode_video(infile,outfile):
+	transcode_video_x264(infile,outfile)
 
-def transcode_video_x264(filename):
+def transcode_video_x264(infile, outfile):
 	# Strip MPEG2 video to video.mpeg2
 	# TODO This assumes video is the first track. Adjust to find the video
 	# track
-	cmd(["mkvextract", "tracks", filename, "1:video.mpeg2"])
-	# Strip the timecodes
-	cmd(["mkvextract", "timecodes_v2", filename, "1:timecodes.txt"])
+	cmd(["mkvextract", "tracks", infile, "1:video.mpeg2"])
+
+	# Strip the timecode file
+	cmd(["mkvextract", "timecodes_v2", infile, "1:timecodes.txt"])
 
 	# Convert Video to H264
 	cmd(["avconv", "-i", "video.mpeg2", "-c:v", "libx264", "-preset", "veryslow", "-crf", "20" ,"video.h264"])
 
 	# Replace MPEG2 with H264
-	cmd(["mkvmerge", "-o", filename+".h264.mkv", "--timecodes", "0:timecodes.txt", "video.h264", "-D", filename])
+	cmd(["mkvmerge", "-o", outfile, "--timecodes", "0:timecodes.txt", "video.h264", "-D", infile])
 
+	# Remove the temporary files
 	cmd(["rm", "video.h264", "video.mpeg2", "timecodes.txt"])
 
 
@@ -94,26 +98,34 @@ def transcode(filename):
 #
 # Selects all of the videos that are a similar size.  This avoids the small 
 # filler tracks as well as any "Play All" tracks
-def tv_cleanup(mkvs):
-	# Get the sizes of each MKVs
-	mkv_sizes = []
-	for m in mkvs:
-		mkv_sizes.append(size(m))
-
-	mkv_std_devs = []
-	for m in mkv_sizes:
-		# Calculate the Standard Deviation with m as the mean
-		# Find the point that has the lowest standard deviation
+def tv_cleanup(rip_folder):
+	# Generate a list of mkvs from rip folder
+	mkvs = []
+	for x in os.listdir(rip_folder):
+		mkvs.append({
+			"path":rip_folder+"/"+x,
+			"size":	os.path.size(rip_folder+"/"+x),
+			"stddev":0
+			})
 	
+	# Calculate the standard deviation from each point
+	for i in mkvs:
+		for j in mkvs:
+			i["stddev"] += (i["size"]-j["size"])**2
+
+		i["stddev"] = i["stddev"]/len(mkvs)
+		i["stddev"] = math.sqrt(i["stddev"])
+
+
+	# Find the device with the smallest Stddev
 	min_std_dev = min(mkv_std_devs)
 
-	# From the lowest standard deviation point, delete all devices outside
-	
+		
 
 ## Movie Cleanup
 #
 # Selects the largest MKV file and deletes the rest
-def movie_cleanup(mkvs):
+def movie_cleanup(rip_folder):
 	# TODO Use a lambda function instead of a for loop
 	max_size = 0
 	max_file = ""
@@ -131,26 +143,26 @@ def run(args):
 	mkvs = []
 	if not args.only_convert:
 		# Convert Disc to MKVs usign MakeMKV binary
-		mkvs = rip(args.name[0])
+		rip_folder = rip(args.name[0])
 		# Clean up MKVs
 		if args.tv:
 			# Only keep similarly sized video files
-			tv_cleanup(mkvs)
+			mkvs = tv_cleanup(rip_folder)
 		else:
 			# Only keep the largest video file
-			move_cleanup(mkvs)
-		
-
-	if len(mkvs) == 0:
+			mkvs = move_cleanup(rip_folder)
+	
+	# If only converting, use the name object as the mkv list
+	else:
 		mkvs = args.name
+	
 	if not args.only_rip:
 		for mkv in args.name:
 			transcode(mkv,args.video,args.audio,args.only_english)
 
 def parse_args():
 	parser = argparse.ArgumentParser(description="Media Ripping Script")
-	# Select Movie or TV mode
-	parser.add_argument("-m","--movie",action="store_true") 
+	# Select TV mode - Multiple titles are ripped from the disk
 	parser.add_argument("-t","--tv",action="store_true")
 	# Add argument for selecting video codec. x264 is default
 	parser.add_argument(
