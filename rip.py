@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 
 ## Import Libs
-import subprocess
+import subprocess,os
 
 # Generic function for running a shell command
 def cmd(cmd):
@@ -41,19 +41,19 @@ def download_from_SMB(path):
 def transcode_video(filename):
 	transcode_video_x264(filename)
 
-def transcode_video_x264(filename):
+def transcode_video_x264(infile,outfile):
 	# Strip MPEG2 video to video.mpeg2
 	# TODO This assumes video is the first track. Adjust to find the video
 	# track
-	cmd(["mkvextract", "tracks", filename, "1:video.mpeg2"])
+	cmd(["mkvextract", "tracks", infile, "1:video.mpeg2"])
 	# Strip the timecodes
-	cmd(["mkvextract", "timecodes_v2", filename, "1:timecodes.txt"])
+	cmd(["mkvextract", "timecodes_v2", infile, "1:timecodes.txt"])
 
 	# Convert Video to H264
 	cmd(["avconv", "-i", "video.mpeg2", "-c:v", "libx264", "-preset", "veryslow", "-crf", "20" ,"video.h264"])
 
 	# Replace MPEG2 with H264
-	cmd(["mkvmerge", "-o", filename+".h264.mkv", "--timecodes", "0:timecodes.txt", "video.h264", "-D", filename])
+	cmd(["mkvmerge", "-o", outfile, "--timecodes", "0:timecodes.txt", "video.h264", "-D", infile])
 
 	cmd(["rm", "video.h264", "video.mpeg2", "timecodes.txt"])
 
@@ -87,8 +87,8 @@ def transcode(filename):
 
 
 def run():
-	for x in ["0211.mkv","0212.mkv","0213.mkv","0214.mkv"]:
-		transcode_video_x264("raw/"+x)
+	for x in os.listdir("raw"):
+		transcode_video_x264("raw/"+x,"h264/"+x)
 
 run()
 
